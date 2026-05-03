@@ -1,0 +1,51 @@
+{{define "title"}}Trang chủ{{end}}
+
+{{define "content"}}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-800">Tin mới nhất</h1>
+    <p class="text-gray-500 mt-2">Cập nhật tin tức liên tục từ các nguồn uy tín.</p>
+</div>
+
+{{with index . 0}}
+<div class="relative group grid grid-cols-1 md:grid-cols-2 gap-8 mb-12 bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition border">
+    
+    <img src="{{.Thumbnail}}" class="h-64 md:h-full w-full object-cover">
+    
+    <div class="p-8 flex flex-col justify-center">
+        <span class="text-indigo-600 font-bold uppercase text-xs tracking-widest">Nổi bật</span>
+        
+        <h2 class="text-3xl font-bold mt-4 leading-tight">
+            <a href="/detail?id={{.ID}}" class="after:absolute after:inset-0 hover:text-indigo-600 group-hover:text-indigo-600 transition">
+                {{.Title}}
+            </a>
+        </h2>
+        
+        <p class="text-gray-600 mt-4 line-clamp-3">{{.Description}}</p>
+        
+        <div class="mt-6 flex items-center text-sm text-gray-400 font-medium">
+            <span class="z-10 relative hover:text-indigo-500">{{.Source}}</span>
+            <span class="mx-2">•</span>
+            <span>{{timeAgo .PublishedAt}}</span>
+        </div>
+    </div>
+</div>
+{{end}}
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+    {{range (slice . 1)}}
+    <a href="/detail?id={{.ID}}" class="group bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:-translate-y-1 transition duration-300">
+        <img src="{{.Thumbnail}}" class="w-full h-48 object-cover">
+        <div class="p-5">
+            <h3 class="font-bold text-lg leading-tight line-clamp-2 h-12 group-hover:text-indigo-600 transition-colors">
+                {{.Title}}
+            </h3>
+            <p class="text-gray-500 text-sm mt-3 line-clamp-2 italic">{{.Description}}</p>
+            <div class="mt-4 pt-4 border-t border-gray-50 flex justify-between items-center text-xs text-gray-400">
+                <span class="font-bold text-gray-600">{{.Source}}</span>
+                <span>3 giờ trước</span>
+            </div>
+        </div>
+    </a>
+    {{end}}
+</div>
+{{end}}

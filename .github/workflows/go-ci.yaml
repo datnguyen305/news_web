@@ -1,0 +1,33 @@
+name: Go News Project CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      DB_URL: ${{ secrets.DB_URL }}
+      AI_SERVICE_URL: ${{ secrets.AI_SERVICE_URL }}
+      SCRAP_URL: ${{ secrets.SCRAP_URL }}
+      PORT: ${{ secrets.PORT }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.26.2' # Thay bằng version bạn đang dùng
+
+    - name: Install dependencies
+      run: go mod tidy
+
+    - name: Build project
+      run: go build -v ./...
+
+    - name: Run Tests
+      run: go test -v ./...

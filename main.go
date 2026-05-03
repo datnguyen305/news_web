@@ -4,10 +4,11 @@ import (
 	"html/template"
 	"net/http"
 	"time"
-	"webs/database"
-	"webs/handlers" // Import package handlers mới
-	"webs/repository"
-	"webs/scraper"
+
+	"github.com/datnguyen305/news_web/database"
+	"github.com/datnguyen305/news_web/handlers" // Import package handlers mới
+	"github.com/datnguyen305/news_web/repository"
+	"github.com/datnguyen305/news_web/scraper"
 
 	"github.com/charmbracelet/log"
 	"github.com/joho/godotenv"

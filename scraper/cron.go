@@ -8,8 +8,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"webs/models"
-	"webs/repository"
+
+	"github.com/datnguyen305/news_web/models"
+	"github.com/datnguyen305/news_web/repository"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/charmbracelet/log"

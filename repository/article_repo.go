@@ -4,7 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"html/template"
-	"webs/models"
+
+	"github.com/datnguyen305/news_web/models"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lib/pq" // Đừng quên import pq để dùng cho hàm ANY($1)

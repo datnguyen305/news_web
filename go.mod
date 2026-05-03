@@ -1,4 +1,4 @@
-module webs
+module github.com/datnguyen305/news_web
 
 go 1.26.2
 

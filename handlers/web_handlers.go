@@ -8,7 +8,8 @@ import (
 	"net/http"
 	"os"
 	"time"
-	"webs/repository"
+
+	"github.com/datnguyen305/news_web/repository"
 
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/pgxpool"

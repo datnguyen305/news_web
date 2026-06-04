@@ -1,10 +1,10 @@
 package scraper
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -16,6 +16,10 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/mmcdole/gofeed"
 )
+
+type ArticleSaver interface {
+	SaveArticle(ctx context.Context, a models.Article) error
+}
 
 // ExtractThumbnail lấy link ảnh từ chuỗi Description của VnExpress
 func ExtractThumbnail(desc string) string {
@@ -43,13 +47,19 @@ func ExtractDescription(desc string) string {
 	return strings.TrimSpace(cleanText)
 }
 
-func ScrapFullContent(url string) string {
+func ScrapFullContent(ctx context.Context, url string) string {
 	// 1. Tạo request với Timeout để tránh treo chương trình
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	res, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		log.Error("Link bài viết không hợp lệ", "url", url, "err", err)
+		return ""
+	}
+
+	res, err := client.Do(req)
 	if err != nil {
 		log.Error("Không thể truy cập link bài viết", "url", url, "err", err)
 		return ""
@@ -77,18 +87,37 @@ func ScrapFullContent(url string) string {
 		// Lấy text của từng đoạn văn và bọc vào thẻ <p>
 		paragraph := s.Text()
 		if strings.TrimSpace(paragraph) != "" {
-			contentBuilder.WriteString("<p class='mb-4'>" + paragraph + "</p>")
+			contentBuilder.WriteString("<p class='mb-4'>" + template.HTMLEscapeString(paragraph) + "</p>")
 		}
 	})
 
 	return contentBuilder.String()
 }
 
-func FetchAndSave(repo *repository.ArticleRepository) {
+func Run(ctx context.Context, repo *repository.ArticleRepository, rssURL string, interval time.Duration) {
+	if interval <= 0 {
+		interval = time.Hour
+	}
+
+	for {
+		log.Info("Đang kiểm tra tin tức mới...")
+		FetchAndSave(ctx, repo, rssURL)
+
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			log.Info("Dừng scraper")
+			return
+		case <-timer.C:
+		}
+	}
+}
+
+func FetchAndSave(ctx context.Context, repo ArticleSaver, rssURL string) {
 	fp := gofeed.NewParser()
 
 	// Lấy URL từ file .env đã cấu hình
-	rssURL := os.Getenv("SCRAP_URL")
 	if rssURL == "" {
 		log.Error("Chưa cấu hình SCRAP_URL trong .env")
 		return
@@ -101,11 +130,23 @@ func FetchAndSave(repo *repository.ArticleRepository) {
 	}
 
 	for _, item := range feed.Items {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		// 1. Cào nội dung chi tiết (hàm ScrapFullContent của bạn)
-		fullContent := ScrapFullContent(item.Link)
+		fullContent := ScrapFullContent(ctx, item.Link)
 
 		// Nghỉ 1-2 giây để tránh bị VnExpress chặn IP
-		time.Sleep(2 * time.Second)
+		timer := time.NewTimer(2 * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
 
 		// 2. Tạo đối tượng Article
 		article := models.Article{
@@ -115,15 +156,22 @@ func FetchAndSave(repo *repository.ArticleRepository) {
 			Description: ExtractDescription(item.Description),
 			Thumbnail:   ExtractThumbnail(item.Description),
 			Source:      "VnExpress",
-			PublishedAt: *item.PublishedParsed,
+			PublishedAt: publishedAtForItem(item, time.Now()),
 		}
 
 		// 3. Lưu vào DB thông qua Repository
-		err := repo.SaveArticle(article)
+		err := repo.SaveArticle(ctx, article)
 		if err != nil {
 			log.Error("Lỗi lưu bài viết", "title", article.Title, "err", err)
 		} else {
 			fmt.Printf("✅ Đã cập nhật: %s\n", article.Title)
 		}
 	}
+}
+
+func publishedAtForItem(item *gofeed.Item, fallback time.Time) time.Time {
+	if item != nil && item.PublishedParsed != nil {
+		return *item.PublishedParsed
+	}
+	return fallback
 }

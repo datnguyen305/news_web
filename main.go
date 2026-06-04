@@ -1,18 +1,21 @@
 package main
 
 import (
+	"context"
 	"html/template"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/datnguyen305/news_web/database"
-	"github.com/datnguyen305/news_web/handlers" // Import package handlers mới
+	"github.com/datnguyen305/news_web/handlers"
 	"github.com/datnguyen305/news_web/repository"
 	"github.com/datnguyen305/news_web/scraper"
 
 	"github.com/charmbracelet/log"
 	"github.com/joho/godotenv"
-	// ... các import khác
 )
 
 func initTemplates() map[string]*template.Template {
@@ -37,45 +40,79 @@ func initTemplates() map[string]*template.Template {
 }
 
 func main() {
-	// 1. Khởi tạo kết nối Database (ví dụ pgxpool)
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Lỗi: Không tìm thấy file .env")
+	if err := run(); err != nil {
+		log.Fatal("Ứng dụng dừng do lỗi", "err", err)
 	}
-	dbPool := database.InitDB()
+}
+
+func run() error {
+	_ = godotenv.Load()
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		return err
+	}
+
+	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	dbCtx, cancelDB := context.WithTimeout(rootCtx, 10*time.Second)
+	defer cancelDB()
+
+	dbPool, err := database.InitDB(dbCtx, cfg.DBURL)
+	if err != nil {
+		return err
+	}
 	defer dbPool.Close()
 
 	myTemplates := initTemplates()
+	articleRepo := repository.NewArticleRepository(dbPool)
 
-	// 2. KHỞI TẠO REPOSITORY TRƯỚC
-	// Đảm bảo bạn đã truyền dbPool vào struct này
-	articleRepo := &repository.ArticleRepository{
-		Pool: dbPool,
+	if cfg.ScrapURL != "" {
+		go scraper.Run(rootCtx, articleRepo, cfg.ScrapURL, cfg.ScraperInterval)
+	} else {
+		log.Warn("SCRAP_URL chưa được cấu hình, bỏ qua scraper nền")
 	}
 
-	go func() {
-		for {
-			log.Info("🔄 Đang kiểm tra tin tức mới...")
-			scraper.FetchAndSave(articleRepo)
+	articleHdl := &handlers.ArticleHandler{
+		Templates:    myTemplates,
+		Repo:         articleRepo,
+		AIServiceURL: cfg.AIServiceURL,
+		HTTPClient:   &http.Client{Timeout: 10 * time.Second},
+	}
 
-			log.Info("💤 Ngủ 1 giờ trước chu kỳ tiếp theo")
-			time.Sleep(1 * time.Hour)
-		}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", articleHdl.Home)
+	mux.HandleFunc("/detail", articleHdl.Detail)
+	mux.HandleFunc("/chat", articleHdl.HandleChat)
+
+	server := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		log.Info("Server đang chạy", "url", "http://localhost:"+cfg.Port)
+		errCh <- server.ListenAndServe()
 	}()
 
-	// 3. TRUYỀN REPOSITORY VÀO HANDLER
-	articleHdl := &handlers.ArticleHandler{
-		DB:        dbPool,
-		Templates: myTemplates, // Map templates của bạn
-		Repo:      articleRepo, // CỰC KỲ QUAN TRỌNG: Không được để trống dòng này
+	select {
+	case <-rootCtx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		return nil
+	case err := <-errCh:
+		if err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
 	}
-
-	// 4. Đăng ký các route
-	http.HandleFunc("/", articleHdl.Home)
-	http.HandleFunc("/detail", articleHdl.Detail)
-	http.HandleFunc("/chat", articleHdl.HandleChat)
-
-	// Chạy server...
-	log.Info("Server đang chạy tại http://localhost:8080")
-	http.ListenAndServe(":8080", nil)
 }

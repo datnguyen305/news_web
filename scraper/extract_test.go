@@ -2,6 +2,9 @@ package scraper
 
 import (
 	"testing"
+	"time"
+
+	"github.com/mmcdole/gofeed"
 )
 
 func TestExtractDescription(t *testing.T) {
@@ -12,6 +15,27 @@ func TestExtractDescription(t *testing.T) {
 
 	if result != expected {
 		t.Errorf("ExtractDescription() lỗi!\nKết quả: %v\nMong đợi: %v", result, expected)
+	}
+}
+
+func TestPublishedAtForItemUsesFallbackWhenMissing(t *testing.T) {
+	fallback := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+
+	result := publishedAtForItem(&gofeed.Item{}, fallback)
+
+	if !result.Equal(fallback) {
+		t.Fatalf("publishedAtForItem() = %v, want %v", result, fallback)
+	}
+}
+
+func TestPublishedAtForItemUsesParsedTime(t *testing.T) {
+	fallback := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	published := time.Date(2026, 6, 3, 8, 30, 0, 0, time.UTC)
+
+	result := publishedAtForItem(&gofeed.Item{PublishedParsed: &published}, fallback)
+
+	if !result.Equal(published) {
+		t.Fatalf("publishedAtForItem() = %v, want %v", result, published)
 	}
 }
 

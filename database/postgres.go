@@ -3,38 +3,26 @@ package database
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // InitDB khởi tạo kết nối Database
-func InitDB() *pgxpool.Pool {
-	// Định dạng: postgres://user:password@localhost:5432/dbname
-	// Hãy thay đổi thông số này theo máy của bạn
-	connstring := os.Getenv("DB_URL")
-	connStr := connstring
-	fmt.Print(connStr)
-
-	config, err := pgxpool.ParseConfig(connStr)
+func InitDB(ctx context.Context, dbURL string) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Không thể cấu hình database: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("không thể cấu hình database: %w", err)
 	}
 
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Lỗi tạo connection pool: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("lỗi tạo connection pool: %w", err)
 	}
 
-	// Kiểm tra kết nối thật sự bằng cách Ping
-	err = pool.Ping(context.Background())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Không thể kết nối tới Postgres: %v\n", err)
-		os.Exit(1)
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("không thể kết nối tới Postgres: %w", err)
 	}
 
-	fmt.Println("Kết nối PostgreSQL thành công!")
-	return pool
+	return pool, nil
 }
